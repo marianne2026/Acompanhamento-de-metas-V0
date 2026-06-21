@@ -131,6 +131,12 @@
   .mini-bar-fill { height: 100%; border-radius: 3px; background: var(--accent); }
   .td-pct { font-weight: 700; color: var(--accent); text-align: right; white-space: nowrap; }
   .evo-empty { text-align: center; padding: 3rem 1rem; color: var(--text-3); font-size: 14px; }
+  .detail-collapsible { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .detail-toggle { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 13px 16px; background: none; border: none; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text); transition: background 0.1s; }
+  .detail-toggle:hover { background: var(--surface-2); }
+  .detail-arrow { font-size: 14px; color: var(--text-3); transition: transform 0.2s; display: inline-block; }
+  .detail-arrow.open { transform: rotate(180deg); }
+  .detail-body { border-top: 1px solid var(--border); }
   @media (max-width: 480px) {
     .add-section { flex-direction: column; }
     input[type="text"] { min-width: unset; }
@@ -266,16 +272,7 @@ function addTask() {
   persist(); renderTasks();
 }
 
-function deleteTask(id) {
-  if (!confirm('Remover esta tarefa do checklist?')) return;
-  tasks = tasks.filter(t => t.id!==id);
-  persist(); renderTasks();
-}
 
-function setVal(id, val) {
-  const d = getDayData(); d.values[id] = val;
-  persist(); renderTasks();
-}
 
 function computeScore() {
   if (!tasks.length) return {score:0, total:0, pct:0};
@@ -294,7 +291,7 @@ function renderTasks() {
   const list = document.getElementById('task-list');
   const prog = document.getElementById('progress-area');
   if (!tasks.length) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-icon">&#x2713;</div><p>Nenhuma tarefa cadastrada.<br>Adicione tarefas no campo acima.</p></div>`;
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x2713;</div><p>Nenhuma tarefa cadastrada.<br>Adicione tarefas no campo acima.</p></div>';
     prog.style.display='none'; return;
   }
   const data = getDayData();
@@ -303,33 +300,60 @@ function renderTasks() {
     let control='', done=false;
     if (t.type==='sn') {
       done = v==='sim';
-      control = `<div class="sn-group">
-        <button class="sn-btn ${v==='sim'?'active-sim':''}" onclick="setVal(${t.id},'sim')">Sim</button>
-        <button class="sn-btn ${v==='nao'?'active-nao':''}" onclick="setVal(${t.id},'nao')">Não</button>
-      </div>`;
+      control = '<div class="sn-group">'
+        + '<button class="sn-btn ' + (v==='sim'?'active-sim':'') + '" data-id="' + t.id + '" data-val="sim">Sim</button>'
+        + '<button class="sn-btn ' + (v==='nao'?'active-nao':'') + '" data-id="' + t.id + '" data-val="nao">Não</button>'
+        + '</div>';
     } else {
       const p = parseInt(v)||0; done = p===100;
       const cls = p===100?'complete':(p>0?'filled':'');
-      control = `<select class="pct-select ${cls}" onchange="setVal(${t.id},this.value)">
-        <option value="0" ${p===0?'selected':''}>0%</option>
-        <option value="25" ${p===25?'selected':''}>25%</option>
-        <option value="50" ${p===50?'selected':''}>50%</option>
-        <option value="75" ${p===75?'selected':''}>75%</option>
-        <option value="100" ${p===100?'selected':''}>100%</option>
-      </select>`;
+      control = '<select class="pct-select ' + cls + '" data-id="' + t.id + '">'
+        + '<option value="0"'+(p===0?' selected':'')+'>0%</option>'
+        + '<option value="25"'+(p===25?' selected':'')+'>25%</option>'
+        + '<option value="50"'+(p===50?' selected':'')+'>50%</option>'
+        + '<option value="75"'+(p===75?' selected':'')+'>75%</option>'
+        + '<option value="100"'+(p===100?' selected':'')+'>100%</option>'
+        + '</select>';
     }
-    const badge = t.type==='sn' ? '<span class="task-type-badge badge-sn">S/N</span>' : '<span class="task-type-badge badge-pct">%</span>';
-    return `<div class="task-card ${done?'done':''}">
-      ${badge}
-      <span class="task-name ${done?'crossed':''}">${escHtml(t.name)}</span>
-      ${control}
-      <button class="del-btn" onclick="deleteTask(${t.id})" title="Remover">&#x2715;</button>
-    </div>`;
+    const badge = t.type==='sn'
+      ? '<span class="task-type-badge badge-sn">S/N</span>'
+      : '<span class="task-type-badge badge-pct">%</span>';
+    return '<div class="task-card ' + (done?'done':'') + '">'
+      + badge
+      + '<span class="task-name ' + (done?'crossed':'') + '">' + escHtml(t.name) + '</span>'
+      + control
+      + '<button class="del-btn" data-id="' + t.id + '" title="Remover">&#x2715;</button>'
+      + '</div>';
   }).join('');
-  const {pct} = computeScore();
+
+  list.querySelectorAll('.del-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const id = Number(this.getAttribute('data-id'));
+      if (!confirm('Remover esta tarefa do checklist?')) return;
+      tasks = tasks.filter(function(t) { return t.id !== id; });
+      persist(); renderTasks();
+    });
+  });
+  list.querySelectorAll('.sn-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const id = Number(this.getAttribute('data-id'));
+      const val = this.getAttribute('data-val');
+      const d = getDayData(); d.values[id] = val;
+      persist(); renderTasks();
+    });
+  });
+  list.querySelectorAll('.pct-select').forEach(function(sel) {
+    sel.addEventListener('change', function() {
+      const id = Number(this.getAttribute('data-id'));
+      const d = getDayData(); d.values[id] = this.value;
+      persist(); renderTasks();
+    });
+  });
+
+  const res = computeScore();
   prog.style.display='block';
-  document.getElementById('progress-fill').style.width = pct+'%';
-  document.getElementById('progress-pct').textContent = pct+'%';
+  document.getElementById('progress-fill').style.width = res.pct+'%';
+  document.getElementById('progress-pct').textContent = res.pct+'%';
 }
 
 function saveDay() {
@@ -516,43 +540,53 @@ function renderEvo() {
   const minPct = validBars.length ? Math.min(...validBars.map(b=>b.pct)) : null;
   const diasSalvos = validBars.length;
 
-  // tabela por tarefa (apenas período semanal mostra por tarefa)
+  // tabela por tarefa — funciona nos 3 modos
   let taskTableHTML = '';
-  if (evoPeriod==='semana') {
-    const days = daysInRange(range.start, range.end);
-    const savedDays = days.filter(k=>history[k]&&history[k].saved);
-    if (savedDays.length) {
-      const taskMap={};
-      savedDays.forEach(k=>{
-        const entry=history[k];
-        const snap=entry.snapshot||tasks;
-        snap.forEach(t=>{
-          if (!taskMap[t.id]) taskMap[t.id]={name:t.name, type:t.type, scores:[]};
-          const v=(entry.values||{})[t.id];
-          let s=0;
-          if (t.type==='sn') s=v==='sim'?1:0;
-          else s=(parseInt(v)||0)/100;
-          taskMap[t.id].scores.push(s);
-        });
+  const allSavedDays = daysInRange(range.start, range.end).filter(k=>history[k]&&history[k].saved);
+  if (allSavedDays.length) {
+    const taskMap = {};
+    allSavedDays.forEach(k=>{
+      const entry = history[k];
+      const snap = entry.snapshot || tasks;
+      snap.forEach(t=>{
+        if (!taskMap[t.id]) taskMap[t.id] = {name:t.name, type:t.type, scores:[]};
+        const v = (entry.values||{})[t.id];
+        let s = 0;
+        if (t.type==='sn') s = v==='sim' ? 1 : 0;
+        else s = (parseInt(v)||0)/100;
+        taskMap[t.id].scores.push(s);
       });
-      const rows = Object.values(taskMap).map(t=>{
-        const avg = t.scores.length ? t.scores.reduce((a,b)=>a+b,0)/t.scores.length : 0;
-        const pct = Math.round(avg*100);
-        const barColor = pct>=75?'var(--accent)':pct>=40?'#66bb6a':'#c8e6c9';
-        return `<tr>
-          <td class="td-name">${escHtml(t.name)}</td>
-          <td><span class="task-type-badge ${t.type==='sn'?'badge-sn':'badge-pct'}">${t.type==='sn'?'S/N':'%'}</span></td>
-          <td><div class="mini-bar-wrap"><div class="mini-bar-track"><div class="mini-bar-fill" style="width:${pct}%;background:${barColor}"></div></div></div></td>
-          <td class="td-pct">${pct}%</td>
-        </tr>`;
-      }).join('');
-      taskTableHTML = `<div class="detail-table">
-        <table>
-          <thead><tr><th>Tarefa</th><th>Tipo</th><th>Média do período</th><th style="text-align:right">%</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
+    });
+    const rows = Object.values(taskMap).sort((a,b)=>{
+      const pa = Math.round((a.scores.reduce((x,y)=>x+y,0)/a.scores.length)*100);
+      const pb = Math.round((b.scores.reduce((x,y)=>x+y,0)/b.scores.length)*100);
+      return pb - pa;
+    }).map(t=>{
+      const avg = t.scores.reduce((a,b)=>a+b,0) / t.scores.length;
+      const pct = Math.round(avg*100);
+      const barColor = pct>=75?'var(--accent)':pct>=40?'#66bb6a':'#c8e6c9';
+      return `<tr>
+        <td class="td-name">${escHtml(t.name)}</td>
+        <td><span class="task-type-badge ${t.type==='sn'?'badge-sn':'badge-pct'}">${t.type==='sn'?'S/N':'%'}</span></td>
+        <td><div class="mini-bar-wrap"><div class="mini-bar-track"><div class="mini-bar-fill" style="width:${pct}%;background:${barColor}"></div></div></div></td>
+        <td class="td-pct">${pct}%</td>
+      </tr>`;
+    }).join('');
+    taskTableHTML = `
+      <div class="detail-collapsible">
+        <button class="detail-toggle" onclick="toggleTaskDetail(this)" aria-expanded="false">
+          <span>&#128203; Detalhe por tarefa</span>
+          <span class="detail-arrow">&#8964;</span>
+        </button>
+        <div class="detail-body" style="display:none;">
+          <div class="detail-table">
+            <table>
+              <thead><tr><th>Tarefa</th><th>Tipo</th><th>Média do período</th><th style="text-align:right">%</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
       </div>`;
-    }
   }
 
   // bloquear nav futuro
@@ -561,11 +595,7 @@ function renderEvo() {
 
   document.getElementById('evo-period-label').textContent = periodLabel();
 
-  const maxBar = validBars.length ? Math.max(...validBars.map(b=>b.pct), 1) : 100;
-
   const bars = barData.map(b=>{
-    const h = b.pct!==null ? Math.round((b.pct/100)*100) : 0;
-    const cls = b.pct===null?'':'b.pct<40?low:b.pct<70?mid:high';
     const barCls = b.pct===null?'':(b.pct<40?'low':b.pct<70?'mid':'high');
     const tipText = b.pct!==null ? b.pct+'%' : 'sem registro';
     return `<div class="bar-col">
@@ -588,7 +618,7 @@ function renderEvo() {
           <div class="summary-card-sub">do período</div>
         </div>
         <div class="summary-card">
-          <div class="summary-card-label">Melhor dia/período</div>
+          <div class="summary-card-label">Melhor resultado</div>
           <div class="summary-card-value">${maxPct}%</div>
           <div class="summary-card-sub">máximo registrado</div>
         </div>
@@ -608,6 +638,15 @@ function renderEvo() {
         <div class="bar-chart">${bars}</div>
       </div>
       ${taskTableHTML}`;
+}
+
+function toggleTaskDetail(btn) {
+  const body = btn.nextElementSibling;
+  const arrow = btn.querySelector('.detail-arrow');
+  const open = body.style.display !== 'block';
+  body.style.display = open ? 'block' : 'none';
+  arrow.classList.toggle('open', open);
+  btn.setAttribute('aria-expanded', open);
 }
 
 function labelForKey(k, type) {
